@@ -28,8 +28,16 @@
 
 	consumeEvents(function ($event) {
 		$event['timestamp'] = $event['@timestamp']; unset($event['@timestamp']);
-		unset($event['@version']);
-		unset($event['@tags']);
+
+		// Things we don't really care about.
+		foreach (['@version', '@tags', 't', 'id', 'ctx', 's', 'c', 'attr', 'client'] as $t) {
+			unset($event[$t]);
+		}
+
+		if (!isset($event['message'])) {
+			echo 'Ignoring invalid event: ', json_encode($event), "\n";
+			return;
+		}
 
 		echo sprintf('%s [%s:%s] %s', showTime(), $event['docker']['name'], $event['stream'], $event['message']), "\n";
 
