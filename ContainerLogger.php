@@ -33,7 +33,12 @@
 
 		echo sprintf('%s [%s:%s] %s', showTime(), $event['docker']['name'], $event['stream'], $event['message']), "\n";
 
-		Mongo::get()->getCollection('dockerlogs')->insertOne($event);
+		try {
+			Mongo::get()->getCollection('dockerlogs')->insertOne($event);
+		} catch (Exception $ex) {
+			echo 'Error inserting event log to mongo: ', $ex->getMessage(), "\n";
+			echo 'Event: ', json_encode($event), "\n";
+		}
 	}, 'docker.logs');
 
 	$activeJobs = [];
