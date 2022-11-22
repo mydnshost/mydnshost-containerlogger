@@ -25,9 +25,12 @@
 	Mongo::get()->getCollection('dockerlogs')->createIndex(['timestamp' => 1], ['expireAfterSeconds' => 5 * 24 * 60 * 60]);
 	Mongo::get()->getCollection('dockerlogs')->createIndex(['docker.hostname' => 1]);
 	Mongo::get()->getCollection('dockerlogs')->createIndex(['timestamp' => 1, 'docker.hostname' => 1]);
+	// TODO: This may take a long time to run on an existing collection.
+	Mongo::get()->getCollection('dockerlogs')->createIndex(['message' => 'text']);
 
 	consumeEvents(function ($event) {
 		$event['timestamp'] = $event['@timestamp']; unset($event['@timestamp']);
+		$event['timestamp'] = new MongoDB\BSON\UTCDateTime(new \DateTime($event['timestamp']));
 
 		// Things we don't really care about.
 		foreach (['@version', '@tags', 't', 'id', 'ctx', 's', 'c', 'attr', 'client'] as $t) {
