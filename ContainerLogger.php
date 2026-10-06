@@ -22,11 +22,32 @@
 	}
 
 	Mongo::get()->connect();
-	Mongo::get()->getCollection('dockerlogs')->createIndex(['timestamp' => 1], ['expireAfterSeconds' => 5 * 24 * 60 * 60]);
-	Mongo::get()->getCollection('dockerlogs')->createIndex(['docker.hostname' => 1]);
-	Mongo::get()->getCollection('dockerlogs')->createIndex(['timestamp' => 1, 'docker.hostname' => 1]);
-	// TODO: This may take a long time to run on an existing collection.
-	Mongo::get()->getCollection('dockerlogs')->createIndex(['message' => 'text']);
+
+	// Logs are kept in a capped collection so that a burst of log spam can
+	// only push out older logs rather than fill the disk.
+	$logsSize = intval(getEnvOrDefault('DOCKERLOGS_SIZE_MB', 1024)) * 1024 * 1024;
+	$isCapped = null;
+	foreach (Mongo::get()->getMongoDB()->listCollections(['filter' => ['name' => 'dockerlogs']]) as $info) {
+		$isCapped = !empty($info->getOptions()['capped']);
+	}
+
+	if ($isCapped === null) {
+		echo showTime(), ' ', 'Creating capped dockerlogs collection.', "\n";
+		Mongo::get()->getMongoDB()->createCollection('dockerlogs', ['capped' => true, 'size' => $logsSize]);
+	} else if (!$isCapped) {
+		echo showTime(), ' ', 'Converting dockerlogs to a capped collection.', "\n";
+		Mongo::get()->getMongoDB()->command(['convertToCapped' => 'dockerlogs', 'size' => $logsSize]);
+	}
+
+	// Remove indexes from before the collection was capped.
+	foreach (['timestamp_1', 'docker.hostname_1', 'timestamp_1_docker.hostname_1', 'message_text'] as $index) {
+		try {
+			Mongo::get()->getCollection('dockerlogs')->dropIndex($index);
+		} catch (Exception $ex) { }
+	}
+
+	// Matches the queries in the API: distinct hostnames, and per-host logs sorted by time.
+	Mongo::get()->getCollection('dockerlogs')->createIndex(['docker.hostname' => 1, 'timestamp' => -1]);
 
 	consumeEvents(function ($event) {
 		$event['timestamp'] = $event['@timestamp']; unset($event['@timestamp']);
